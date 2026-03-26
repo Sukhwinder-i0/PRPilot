@@ -70,20 +70,31 @@ export function verifyWebhookSignature(
     signature: string,
     secret: string
 ): boolean {
+    if (!signature || !secret) {
+        console.error("❌ Signature or Secret is missing");
+        return false;
+    }
+
     const hmac = crypto.createHmac("sha256", secret);
     hmac.update(payload, "utf-8");
     const digest = `sha256=${hmac.digest("hex")}`;
 
-    if (signature.length !== digest.length) {
+    const signatureBuffer = Buffer.from(signature, "utf-8");
+    const digestBuffer = Buffer.from(digest, "utf-8");
+
+    if (signatureBuffer.length !== digestBuffer.length) {
+        console.error(`❌ Signature length mismatch: expected ${digestBuffer.length}, got ${signatureBuffer.length}`);
         return false;
     }
 
     try {
-        return crypto.timingSafeEqual(
-            Buffer.from(signature, "utf-8"),
-            Buffer.from(digest, "utf-8")
-        );
-    } catch {
+        const isValid = crypto.timingSafeEqual(signatureBuffer, digestBuffer);
+        if (!isValid) {
+            console.error("❌ Signature digest mismatch");
+        }
+        return isValid;
+    } catch (error) {
+        console.error("❌ crypto.timingSafeEqual error:", error);
         return false;
     }
 }
