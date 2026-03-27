@@ -30,23 +30,27 @@ export async function generatePRReview(
             "\n\n> **Note:** This diff was truncated to 12,000 characters. Some files may not be reviewed.";
     }
 
-    const userPrompt = `Review this PR titled: ${prTitle}
+    console.log("=== DIFF SENT TO GEMINI ===");
+    console.log(processedDiff);
+    console.log("===========================");
+
+    const userPrompt = `Review this PR titled: "${prTitle}"
 
 Diff:
 ${processedDiff}
 
-Respond in this exact Markdown format:
-## Summary
-(2 sentences max)
+Rules:
+- Be extremely concise. Max 5-6 lines total.
+- Only mention real bugs or important issues. Skip minor style nits.
+- If the code looks fine, just say "LGTM 👍" and one line about what it does.
+- Use bullet points, no headers.
+- No pleasantries, no filler words.
 
-## Issues
-(bullet list, bugs or logic errors only, skip if none)
-
-## Suggestions
-(bullet list, max 3, actionable only)
-
-## What's good
-(one line)`;
+Format:
+• One-line summary of what the PR does
+• Bug or issue (only if found)
+• One actionable suggestion (only if important)
+`;
 
     try {
         const genAI = new GoogleGenerativeAI(apiKey);
