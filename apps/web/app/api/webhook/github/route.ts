@@ -62,7 +62,7 @@ export async function POST(request: Request) {
             return NextResponse.json({ ok: true, skipped: "not a pull_request event" });
         }
 
-        if (payload.action !== "opened" && payload.action !== "synchronize") {
+        if (payload.action !== "opened" && payload.action !== "synchronize" && payload.action !== "reopened") {
             console.log(`⏭️ Skipping: action is ${payload.action}`);
             return NextResponse.json({ ok: true, skipped: `action: ${payload.action}` });
         }

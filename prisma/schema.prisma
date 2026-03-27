@@ -39,7 +39,7 @@ model Review {
   prUrl     String
   summary   String
   fullReview String      @db.Text
-  commentId Int?         // GitHub comment ID for updates
+  commentId BigInt?       // GitHub comment ID (can exceed 32-bit)
   status    ReviewStatus @default(PENDING)
   repoId    String
   repo      Repo         @relation(fields: [repoId], references: [id])
