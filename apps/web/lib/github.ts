@@ -68,6 +68,46 @@ export interface InlineComment {
 }
 
 /**
+ * Parses a unified diff to extract valid right-side line numbers that were added or kept as context.
+ */
+export function getValidDiffLines(diff: string): Map<string, Set<number>> {
+    const validLines = new Map<string, Set<number>>();
+    let currentFile = "";
+    let currentLine = 0;
+
+    const lines = diff.split('\n');
+    for (const line of lines) {
+        if (line.startsWith('diff --git')) {
+            const parts = line.split(' ');
+            if (parts.length >= 3) {
+                currentFile = parts[parts.length - 1].replace(/^b\//, '');
+                if (!validLines.has(currentFile)) {
+                    validLines.set(currentFile, new Set());
+                }
+            }
+        } else if (line.startsWith('+++ b/')) {
+            currentFile = line.substring(6);
+            if (!validLines.has(currentFile)) {
+                validLines.set(currentFile, new Set());
+            }
+        } else if (line.startsWith('@@ ')) {
+            const match = line.match(/\+([0-9]+)/);
+            if (match) {
+                currentLine = parseInt(match[1], 10);
+            }
+        } else if (line.startsWith('+') || line.startsWith(' ')) {
+            if (currentFile && currentLine > 0) {
+                validLines.get(currentFile)?.add(currentLine);
+                currentLine++;
+            }
+        } else if (line.startsWith('-')) {
+            // deleted line, doesn't increment right-side counter
+        }
+    }
+    return validLines;
+}
+
+/**
  * Post a bulk review containing inline comments.
  * Falls back to a standard PR comment if inline comments fail (e.g. invalid line number).
  */
@@ -78,9 +118,30 @@ export async function postInlineReviewComments(
     commitId: string,
     body: string,
     comments: InlineComment[],
-    token: string
+    token: string,
+    diff: string
 ): Promise<number> {
     const octokit = new Octokit({ auth: token });
+
+    const validLinesMap = getValidDiffLines(diff);
+    const validComments: InlineComment[] = [];
+    const invalidComments: InlineComment[] = [];
+
+    for (const comment of comments) {
+        const fileLines = validLinesMap.get(comment.path);
+        if (fileLines && fileLines.has(comment.line)) {
+            validComments.push(comment);
+        } else {
+            invalidComments.push(comment);
+        }
+    }
+
+    let finalBody = body;
+    if (invalidComments.length > 0) {
+        console.log(`⚠️ Filtered out ${invalidComments.length} invalid inline comments.`);
+        finalBody += "\n\n### Additional Comments\n" +
+            invalidComments.map(c => `- **${c.path}:${c.line}**: ${c.body}`).join("\n");
+    }
 
     try {
         const { data } = await octokit.pulls.createReview({
@@ -88,9 +149,9 @@ export async function postInlineReviewComments(
             repo,
             pull_number: prNumber,
             commit_id: commitId,
-            body,
+            body: finalBody,
             event: "COMMENT",
-            comments,
+            comments: validComments,
         });
         return data.id;
     } catch (error) {
@@ -98,8 +159,8 @@ export async function postInlineReviewComments(
 
         // Fallback: Just post a regular issue comment with the summary if inline fails
         console.log("Falling back to standard PR comment");
-        const fallbackBody = body + "\n\n### Additional Comments (Inline Failed)\n" +
-            comments.map(c => `- **${c.path}:${c.line}**: ${c.body}`).join("\n");
+        const fallbackBody = finalBody + "\n\n### Additional Comments (Inline Failed)\n" +
+            validComments.map(c => `- **${c.path}:${c.line}**: ${c.body}`).join("\n");
 
         const { data } = await octokit.issues.createComment({
             owner,
