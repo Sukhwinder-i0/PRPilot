@@ -125,7 +125,8 @@ export async function POST(request: Request) {
             commitId,
             `## 🤖 PRPilot Review\n\n${review.summary}`,
             review.comments,
-            user.accessToken
+            user.accessToken,
+            diff
         );
 
         console.log(`✅ Review posted (Comment ID: ${commentId})`);
