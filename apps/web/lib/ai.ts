@@ -14,10 +14,19 @@ export class PRReviewError extends Error {
     }
 }
 
+export interface AIReviewResult {
+    summary: string;
+    comments: Array<{
+        path: string;
+        line: number;
+        body: string;
+    }>;
+}
+
 export async function generatePRReview(
     diff: string,
     prTitle: string
-): Promise<string> {
+): Promise<AIReviewResult> {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new PRReviewError("GEMINI_API_KEY is not set");
 
@@ -40,16 +49,22 @@ Diff:
 ${processedDiff}
 
 Rules:
-- Be extremely concise. Max 5-6 lines total.
+- Be extremely concise. Max 5-6 lines total for the summary.
 - Only mention real bugs or important issues. Skip minor style nits.
-- If the code looks fine, just say "LGTM 👍" and one line about what it does.
-- Use bullet points, no headers.
-- No pleasantries, no filler words.
-
-Format:
-• One-line summary of what the PR does
-• Bug or issue (only if found)
-• One actionable suggestion (only if important)
+- If the code looks fine, the summary can just be "LGTM 👍".
+- You MUST return a valid JSON object matching this schema:
+  {
+    "summary": "Overall summary of the PR.",
+    "comments": [
+      {
+        "path": "path/to/file.ts",
+        "line": 10,
+        "body": "Issue or suggestion for this specific line."
+      }
+    ]
+  }
+- Ensure that the \`path\` matches a file in the diff exactly.
+- Ensure that the \`line\` is an exact line number present in the added/modified parts of the diff for that file.
 `;
 
     try {
@@ -58,7 +73,10 @@ Format:
         const model = genAI.getGenerativeModel({
             model: MODEL,
             systemInstruction:
-                "You are a senior code reviewer. Be direct and useful. Never be sycophantic.",
+                "You are a senior code reviewer. Be direct and useful. Never be sycophantic. Always return a raw JSON object.",
+            generationConfig: {
+                responseMimeType: "application/json",
+            },
             safetySettings: [
                 {
                     category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -76,7 +94,11 @@ Format:
 
         if (!text) throw new PRReviewError("Gemini returned an empty response");
 
-        return text + truncationNote;
+        const parsed = JSON.parse(text) as AIReviewResult;
+        if (truncationNote) {
+            parsed.summary += truncationNote;
+        }
+        return parsed;
     } catch (err) {
         if (err instanceof PRReviewError) throw err;
         throw new PRReviewError("Gemini API call failed", err);
