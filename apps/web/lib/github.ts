@@ -61,6 +61,56 @@ export async function postReviewComment(
     return data.id;
 }
 
+export interface InlineComment {
+    path: string;
+    line: number;
+    body: string;
+}
+
+/**
+ * Post a bulk review containing inline comments.
+ * Falls back to a standard PR comment if inline comments fail (e.g. invalid line number).
+ */
+export async function postInlineReviewComments(
+    owner: string,
+    repo: string,
+    prNumber: number,
+    commitId: string,
+    body: string,
+    comments: InlineComment[],
+    token: string
+): Promise<number> {
+    const octokit = new Octokit({ auth: token });
+
+    try {
+        const { data } = await octokit.pulls.createReview({
+            owner,
+            repo,
+            pull_number: prNumber,
+            commit_id: commitId,
+            body,
+            event: "COMMENT",
+            comments,
+        });
+        return data.id;
+    } catch (error) {
+        console.error("❌ Failed to create bulk review with inline comments:", error);
+
+        // Fallback: Just post a regular issue comment with the summary if inline fails
+        console.log("Falling back to standard PR comment");
+        const fallbackBody = body + "\n\n### Additional Comments (Inline Failed)\n" +
+            comments.map(c => `- **${c.path}:${c.line}**: ${c.body}`).join("\n");
+
+        const { data } = await octokit.issues.createComment({
+            owner,
+            repo,
+            issue_number: prNumber,
+            body: fallbackBody,
+        });
+        return data.id;
+    }
+}
+
 /**
  * Verify the GitHub webhook signature using HMAC-SHA256.
  * Uses crypto.timingSafeEqual to prevent timing attacks.
