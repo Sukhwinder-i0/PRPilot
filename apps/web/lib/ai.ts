@@ -49,20 +49,24 @@ Diff:
 ${processedDiff}
 
 Rules:
-- Be extremely concise. Max 5-6 lines total for the summary.
-- Only mention real bugs or important issues. Skip minor style nits.
-- If the code looks fine, the summary can just be "LGTM 👍".
+- Write in simple, easy-to-understand language. The person reading this might be a beginner or a "vibe coder" — avoid heavy jargon.
+- Keep the summary short (3-5 lines max).
+- If everything looks good, be genuinely positive and encouraging! Say something like "Great work! This looks clean and solid 🚀" — make the contributor feel good about their work.
+- If something could break or cause a bug, be very clear and direct about it. Say exactly WHICH file and WHAT could go wrong, like: "⚠️ This file might break because..." or "🐛 This line could cause a crash if..."
+- Only flag real problems. Don't nitpick small style issues.
+- For inline comments, explain the issue like you're helping a friend — not lecturing them.
 - You MUST return a valid JSON object matching this schema:
   {
-    "summary": "Overall summary of the PR.",
+    "summary": "A friendly overall summary of the PR.",
     "comments": [
       {
         "path": "path/to/file.ts",
         "line": 10,
-        "body": "Issue or suggestion for this specific line."
+        "body": "Hey! This line might cause an issue because... Here's what you can do to fix it: ..."
       }
     ]
   }
+- If there are no issues, return an empty comments array: "comments": []
 - Ensure that the \`path\` matches a file in the diff exactly.
 - Ensure that the \`line\` is an exact line number present in the added/modified parts of the diff for that file.
 `;
@@ -73,7 +77,7 @@ Rules:
         const model = genAI.getGenerativeModel({
             model: MODEL,
             systemInstruction:
-                "You are a senior code reviewer. Be direct and useful. Never be sycophantic. Always return a raw JSON object.",
+                "You are a friendly senior developer reviewing code for beginners. Be supportive and encouraging when things look good. Be clear and helpful when something is wrong — explain it simply, like you're helping a friend. Always return a raw JSON object.",
             generationConfig: {
                 responseMimeType: "application/json",
             },
