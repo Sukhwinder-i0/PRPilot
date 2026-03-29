@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { verifyWebhookSignature, getPRDiff, postReviewComment } from "@/lib/github";
+import { verifyWebhookSignature, getPRDiff, postInlineReviewComments } from "@/lib/github";
 import { generatePRReview } from "@/lib/ai";
 
 // TODO: add rate limiting to prevent webhook abuse
@@ -12,6 +12,9 @@ interface PullRequestPayload {
     pull_request: {
         title: string;
         html_url: string;
+        head: {
+            sha: string;
+        };
     };
     repository: {
         owner: {
@@ -73,6 +76,7 @@ export async function POST(request: Request) {
         prNumber = payload.number;
         prTitle = payload.pull_request.title;
         prUrl = payload.pull_request.html_url;
+        const commitId = payload.pull_request.head.sha;
 
         console.log(`🔍 Looking for repo: ${owner}/${repoName}`);
 
@@ -114,19 +118,22 @@ export async function POST(request: Request) {
 
         console.log("📝 Posting review comment...");
         // 8. Post review comment on the PR
-        const commentId = await postReviewComment(
+        const commentId = await postInlineReviewComments(
             owner,
             repoName,
             prNumber,
-            `## 🤖 PRPilot Review\n\n${review}`,
-            user.accessToken
+            commitId,
+            `## 🤖 PRPilot Review\n\n${review.summary}`,
+            review.comments,
+            user.accessToken,
+            diff
         );
 
         console.log(`✅ Review posted (Comment ID: ${commentId})`);
 
         // 9. Save Review record to DB with status POSTED
         // Use first 150 chars of the review as summary
-        const summary = review.length > 150 ? review.slice(0, 150) + "…" : review;
+        const summary = review.summary.length > 150 ? review.summary.slice(0, 150) + "…" : review.summary;
 
         await prisma.review.create({
             data: {
@@ -134,7 +141,7 @@ export async function POST(request: Request) {
                 prTitle,
                 prUrl,
                 summary,
-                fullReview: review,
+                fullReview: JSON.stringify(review, null, 2),
                 commentId,
                 status: "POSTED",
                 repoId: repoRecord.id,
