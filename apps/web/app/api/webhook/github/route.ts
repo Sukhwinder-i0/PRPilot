@@ -54,19 +54,94 @@ export async function POST(request: Request) {
         }
 
         // 3. Parse JSON body
-        const payload = JSON.parse(rawBody) as PullRequestPayload;
+        const payload = JSON.parse(rawBody) as any;
 
-        // 4. Only handle pull_request opened or synchronize
+        // 4. Handle different event types
         const event = request.headers.get("x-github-event") ?? "";
         console.log(`Event: ${event}, Action: ${payload.action}`);
 
+        // --- INSTALLATION EVENTS (Syncing Repos to DB) ---
+        if (event === "installation" || event === "installation_repositories") {
+            const senderId = payload.sender?.id?.toString();
+            if (!senderId) {
+                console.error("❌ Installation event missing sender ID");
+                return NextResponse.json({ ok: true, skipped: "missing sender" });
+            }
+
+            const user = await prisma.user.findUnique({ where: { githubId: senderId } });
+            if (!user) {
+                console.error(`❌ User with githubId ${senderId} not found in DB`);
+                return NextResponse.json({ ok: true, skipped: "user not found" });
+            }
+
+            const installationId = payload.installation?.id?.toString();
+
+            if (event === "installation" && payload.action === "created") {
+                const repos = payload.repositories || [];
+                for (const r of repos) {
+                    await prisma.repo.upsert({
+                        where: { githubRepoId: r.id },
+                        create: {
+                            githubRepoId: r.id,
+                            owner: r.full_name.split("/")[0],
+                            name: r.name,
+                            installationId,
+                            active: true,
+                            userId: user.id
+                        },
+                        update: { active: true, installationId, userId: user.id }
+                    });
+                }
+                console.log(`✅ Synced ${repos.length} repos for user ${user.username}`);
+            } else if (event === "installation" && payload.action === "deleted") {
+                if (installationId) {
+                    await prisma.repo.updateMany({
+                        where: { installationId },
+                        data: { active: false }
+                    });
+                    console.log(`🛑 Deactivated repos for installation ${installationId}`);
+                }
+            } else if (event === "installation_repositories") {
+                if (payload.action === "added") {
+                    const added = payload.repositories_added || [];
+                    for (const r of added) {
+                        await prisma.repo.upsert({
+                            where: { githubRepoId: r.id },
+                            create: {
+                                githubRepoId: r.id,
+                                owner: r.full_name.split("/")[0],
+                                name: r.name,
+                                installationId,
+                                active: true,
+                                userId: user.id
+                            },
+                            update: { active: true, installationId, userId: user.id }
+                        });
+                    }
+                    console.log(`✅ Added ${added.length} repos for user ${user.username}`);
+                } else if (payload.action === "removed") {
+                    const removed = payload.repositories_removed || [];
+                    for (const r of removed) {
+                        await prisma.repo.updateMany({
+                            where: { githubRepoId: r.id },
+                            data: { active: false }
+                        });
+                    }
+                    console.log(`🗑️ Removed ${removed.length} repos for user ${user.username}`);
+                }
+            }
+
+            return NextResponse.json({ ok: true });
+        }
+
+        // --- PULL REQUEST EVENTS ---
         if (event !== "pull_request") {
-            console.log("⏭️ Skipping: not a pull_request event");
-            return NextResponse.json({ ok: true, skipped: "not a pull_request event" });
+            console.log("⏭️ Skipping: not a pull_request or installation event");
+            return NextResponse.json({ ok: true, skipped: "unsupported event" });
         }
 
         if (payload.action !== "opened" && payload.action !== "synchronize" && payload.action !== "reopened") {
-            console.log(`⏭️ Skipping: action is ${payload.action}`);
+            console.log(`⏭️ Skipping: PR action is ${payload.action}`);
             return NextResponse.json({ ok: true, skipped: `action: ${payload.action}` });
         }
 
@@ -113,15 +188,15 @@ export async function POST(request: Request) {
 
         console.log("🤖 Generating AI review...");
         // 7. Fetch PR diff and generate AI review
-        const diff = await getPRDiff(owner, repoName, prNumber, user.accessToken);
-        const review = await generatePRReview(diff, prTitle);
+        const diff = await getPRDiff(owner, repoName, prNumber!, user.accessToken);
+        const review = await generatePRReview(diff, prTitle!);
 
         console.log("📝 Posting review comment...");
         // 8. Post review comment on the PR
         const commentId = await postInlineReviewComments(
             owner,
             repoName,
-            prNumber,
+            prNumber!,
             commitId,
             `## 🤖 PRPilot Review\n\n${review.summary}`,
             review.comments,
@@ -137,9 +212,9 @@ export async function POST(request: Request) {
 
         await prisma.review.create({
             data: {
-                prNumber,
-                prTitle,
-                prUrl,
+                prNumber: prNumber!,
+                prTitle: prTitle!,
+                prUrl: prUrl!,
                 summary,
                 fullReview: JSON.stringify(review, null, 2),
                 commentId,
@@ -161,9 +236,9 @@ export async function POST(request: Request) {
             try {
                 await prisma.review.create({
                     data: {
-                        prNumber,
-                        prTitle,
-                        prUrl,
+                        prNumber: prNumber!,
+                        prTitle: prTitle!,
+                        prUrl: prUrl!,
                         summary: "Review failed — see logs for details.",
                         fullReview: error instanceof Error ? error.message : "Unknown error",
                         status: "FAILED",
