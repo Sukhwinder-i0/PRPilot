@@ -39,4 +39,4 @@ coverage/
 
 # Misc
 .vercel
-.turbo
+.turbo.env
