@@ -116,7 +116,7 @@ export async function generatePRReview(
     const model = genAI.getGenerativeModel({
         model: MODEL,
         systemInstruction:
-            "You are a senior developer doing code review. Be concise, simple, direct, and technical. Never use emojis. Only flag real issues.",
+            "You are a senior developer doing code review. Be concise, simple, direct, and very easy language. Never use emojis. Only flag real issues.",
         generationConfig: { responseMimeType: "application/json" },
         safetySettings: [
             {
