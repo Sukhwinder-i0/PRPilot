@@ -4,6 +4,7 @@
   "private": true,
   "description": "AI-powered GitHub PR reviewer",
   "scripts": {
+    "postinstall": "prisma generate",
     "dev": "pnpm --filter web dev",
     "build": "pnpm --filter web build",
     "lint": "pnpm --filter web lint",
