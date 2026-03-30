@@ -3,7 +3,6 @@ import GitHubProvider from "next-auth/providers/github";
 import { prisma } from "./prisma";
 
 // TODO: encrypt accessToken before storing in database
-// TODO: add session refresh logic for expired GitHub tokens
 
 export const authOptions: NextAuthOptions = {
     providers: [
@@ -29,6 +28,10 @@ export const authOptions: NextAuthOptions = {
 
             if (!githubProfile.id || !githubProfile.login) return false;
 
+            const expiresAt = account.expires_at
+                ? new Date(account.expires_at * 1000)
+                : null;
+
             await prisma.user.upsert({
                 where: { githubId: String(githubProfile.id) },
                 update: {
@@ -36,6 +39,8 @@ export const authOptions: NextAuthOptions = {
                     email: user.email ?? null,
                     avatarUrl: githubProfile.avatar_url ?? null,
                     accessToken: account.access_token ?? "",
+                    refreshToken: account.refresh_token ?? null,
+                    expiresAt,
                 },
                 create: {
                     githubId: String(githubProfile.id),
@@ -43,6 +48,8 @@ export const authOptions: NextAuthOptions = {
                     email: user.email ?? null,
                     avatarUrl: githubProfile.avatar_url ?? null,
                     accessToken: account.access_token ?? "",
+                    refreshToken: account.refresh_token ?? null,
+                    expiresAt,
                 },
             });
 
@@ -73,6 +80,55 @@ export const authOptions: NextAuthOptions = {
     },
     secret: process.env.NEXTAUTH_SECRET,
 };
+
+/**
+ * Refresh a GitHub OAuth access token using the stored refresh token.
+ */
+export async function refreshAccessToken(userId: string) {
+    const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { refreshToken: true },
+    });
+
+    if (!user?.refreshToken) {
+        throw new Error("No refresh token available");
+    }
+
+    const response = await fetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+        },
+        body: JSON.stringify({
+            client_id: process.env.GITHUB_CLIENT_ID,
+            client_secret: process.env.GITHUB_CLIENT_SECRET,
+            grant_type: "refresh_token",
+            refresh_token: user.refreshToken,
+        }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || data.error) {
+        throw new Error(`Failed to refresh GitHub token: ${data.error_description || data.error || "Unknown error"}`);
+    }
+
+    const expiresAt = data.expires_in
+        ? new Date(Date.now() + data.expires_in * 1000)
+        : null;
+
+    const updatedUser = await prisma.user.update({
+        where: { id: userId },
+        data: {
+            accessToken: data.access_token,
+            refreshToken: data.refresh_token ?? user.refreshToken,
+            expiresAt,
+        },
+    });
+
+    return updatedUser.accessToken;
+}
 
 export interface SessionWithUserId {
     userId: string;
