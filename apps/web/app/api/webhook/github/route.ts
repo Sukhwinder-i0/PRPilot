@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyWebhookSignature, getPRDiff, postInlineReviewComments } from "@/lib/github";
 import { generatePRReview } from "@/lib/ai";
+import { refreshAccessToken } from "@/lib/auth";
 
 // TODO: add rate limiting to prevent webhook abuse
 // TODO: add queue-based processing for high-volume repos
@@ -176,9 +177,9 @@ export async function POST(request: Request) {
         console.log(`✅ Repo found in DB. User ID: ${repoRecord.userId}`);
 
         // Get user's access token for API calls
-        const user = await prisma.user.findUnique({
+        let user = await prisma.user.findUnique({
             where: { id: repoRecord.userId },
-            select: { accessToken: true },
+            select: { accessToken: true, expiresAt: true },
         });
 
         if (!user) {
@@ -186,9 +187,24 @@ export async function POST(request: Request) {
             return NextResponse.json({ ok: true, skipped: "user not found" });
         }
 
+        let accessToken = user.accessToken;
+
+        // Check if token is expired (or expires soon - e.g. in 1 minute)
+        const isExpired = user.expiresAt && user.expiresAt.getTime() < Date.now() + 60000;
+        if (isExpired) {
+            console.log("🔄 Token expired, refreshing...");
+            try {
+                accessToken = await refreshAccessToken(repoRecord.userId);
+                console.log("✅ Token refreshed successfully");
+            } catch (err) {
+                console.error("❌ Failed to refresh token:", err);
+                // Continue with old token and let it fail with 401 if refresh failed
+            }
+        }
+
         console.log("🤖 Generating AI review...");
         // 7. Fetch PR diff and generate AI review
-        const diff = await getPRDiff(owner, repoName, prNumber!, user.accessToken);
+        const diff = await getPRDiff(owner, repoName, prNumber!, accessToken);
         const review = await generatePRReview(diff, prTitle!);
 
         console.log("📝 Posting review comment...");
@@ -200,7 +216,7 @@ export async function POST(request: Request) {
             commitId,
             `## 🤖 PRPilot Review\n\n${review.summary}`,
             review.comments,
-            user.accessToken,
+            accessToken,
             diff
         );
 
