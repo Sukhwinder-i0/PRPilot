@@ -16,6 +16,7 @@ model User {
   accessToken String   // TODO: encrypt in production
   refreshToken String?  // GitHub OAuth refresh token
   expiresAt    DateTime? // When the accessToken expires
+  geminiApiKey String?   // Custom Google Gemini API Key
   createdAt   DateTime @default(now())
   repos       Repo[]
   reviews     Review[]

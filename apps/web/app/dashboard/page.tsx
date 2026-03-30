@@ -5,6 +5,7 @@ import type { SessionWithUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ReviewCard } from "@/components/ReviewCard";
 import { RepoList } from "@/components/RepoList";
+import { ApiKeyForm } from "@/components/ApiKeyForm";
 
 export default async function DashboardPage() {
     const session = (await getServerSession(authOptions)) as SessionWithUserId | null;
@@ -27,12 +28,27 @@ export default async function DashboardPage() {
 
     return (
         <div className="mx-auto max-w-5xl px-6 py-12">
-            <header className="mb-10">
-                <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
-                <p className="mt-2 text-gray-400">
-                    Your repositories and recent AI reviews.
-                </p>
+            <header className="mb-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+                    <p className="mt-2 text-gray-400">
+                        Your repositories and recent AI reviews.
+                    </p>
+                </div>
+                {process.env.NEXT_PUBLIC_GITHUB_APP_URL && (
+                    <a
+                        href={process.env.NEXT_PUBLIC_GITHUB_APP_URL}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center justify-center rounded-lg bg-indigo-500 px-6 py-2.5 text-sm font-semibold text-white shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:bg-indigo-400 hover:scale-105 transition-all duration-200"
+                    >
+                        Configure GitHub App ↗
+                    </a>
+                )}
             </header>
+
+            {/* API Key Settings */}
+            <ApiKeyForm />
 
             {/* Repos */}
             <section className="mb-12">
