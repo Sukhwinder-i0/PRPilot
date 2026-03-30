@@ -179,7 +179,7 @@ export async function POST(request: Request) {
         // Get user's access token for API calls
         let user = await prisma.user.findUnique({
             where: { id: repoRecord.userId },
-            select: { accessToken: true, expiresAt: true },
+            select: { accessToken: true, expiresAt: true, geminiApiKey: true },
         });
 
         if (!user) {
@@ -205,7 +205,7 @@ export async function POST(request: Request) {
         console.log("🤖 Generating AI review...");
         // 7. Fetch PR diff and generate AI review
         const diff = await getPRDiff(owner, repoName, prNumber!, accessToken);
-        const review = await generatePRReview(diff, prTitle!);
+        const review = await generatePRReview(diff, prTitle!, user.geminiApiKey);
 
         console.log("📝 Posting review comment...");
         // 8. Post review comment on the PR

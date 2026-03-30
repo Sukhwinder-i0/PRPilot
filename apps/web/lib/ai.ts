@@ -95,9 +95,10 @@ Instructions:
 // ── UPDATED: main function ────────────────────────────────────────────────────
 export async function generatePRReview(
     diff: string,
-    prTitle: string
+    prTitle: string,
+    userApiKey?: string | null
 ): Promise<AIReviewResult> {
-    const apiKey = process.env.GEMINI_API_KEY;
+    const apiKey = userApiKey || process.env.GEMINI_API_KEY;
     if (!apiKey) throw new PRReviewError("GEMINI_API_KEY is not set");
 
     const truncated = diff.length > MAX_DIFF_CHARS;
