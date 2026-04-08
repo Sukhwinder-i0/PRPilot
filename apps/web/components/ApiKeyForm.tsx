@@ -120,7 +120,7 @@ export function ApiKeyForm() {
                     <button
                         type="submit"
                         disabled={saving || !inputValue.trim()}
-                        className="bg-indigo-500 hover:bg-indigo-400 disabled:opacity-50 disabled:hover:bg-indigo-500 text-white font-medium py-2.5 px-6 rounded-lg text-sm transition-colors"
+                        className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:hover:bg-indigo-500 text-white font-medium py-2.5 px-6 rounded-md text-sm transition-colors"
                     >
                         {saving ? "Saving..." : "Save Key"}
                     </button>

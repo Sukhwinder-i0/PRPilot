@@ -40,7 +40,7 @@ export default async function LandingPage() {
                             {process.env.NEXT_PUBLIC_GITHUB_APP_URL && (
                                 <a
                                     href={process.env.NEXT_PUBLIC_GITHUB_APP_URL}
-                                    className="rounded-lg border border-gray-700 px-6 py-3 text-sm font-semibold text-gray-300 transition-colors hover:border-gray-500 hover:text-white"
+                                    className="rounded-md border border-gray-700 px-6 py-3 text-sm font-semibold text-gray-300 transition-colors hover:border-gray-500 hover:text-white"
                                 >
                                     Install GitHub App
                                 </a>
